@@ -1,0 +1,7 @@
+
+
+services:
+  datadog-agent:
+    environment:
+      - DD_LOGS_ENABLED=true
+      - DD_APM_ENABLED=true

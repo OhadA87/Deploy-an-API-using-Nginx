@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # Nginx Service
+  nginx:
+    image: nginx:latest
+    ports:
+      - "8080:80"  
+      - "443:443"                      # Expose Nginx on port 8080
+    networks:
+    - nginxDD_network
+    volumes:
+      - ./Projects/API/html:/usr/share/nginx/html
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+
+  # API Service (Node.js)
+  api:
+    image: my_api_image
+    environment:
+      - NODE_ENV=production            # Node.js environment
+      - DD_SERVICE=api-service         # Datadog APM service name
+      - DD_ENV=production              # Datadog environment
+    ports:
+      - "4000:3000"                    # Expose API on port 4000
+    networks:
+      - nginxDD_network                         
+
+  # Datadog Agent Service
+  datadog-agent:
+    image: gcr.io/datadoghq/agent:latest
+    container_name: dd-agent
+    environment:
+      - DD_API_KEY_FILE=/run/secrets/dd_api_key
+      - DD_SITE=${DD_SITE:-datadoghq.eu}
+      - DD_LOGS_ENABLED=${DD_LOGS_ENABLED:-false}
+      - DD_APM_ENABLED=${DD_APM_ENABLED:-false}
+      - DD_DOCKER_LABELS_AS_TAGS=true # labels for tagging
+      - DDNGINX_STATUS_URL=http://nginx:80/nginx_status  # Nginx metrics endpoint
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # Docker socket for container monitoring
+      - /proc/:/host/proc/:ro                          # Host process directory
+      - /sys/fs/cgroup:/host/sys/fs/cgroup:ro          # Host system cgroups
+    networks:
+      - nginxDD_network
+    secrets:
+      - dd_api_key                                 
+    deploy:
+      mode: global 
+      restart_policy:
+        condition: on-failure
+
+secrets:
+  dd_api_key:
+    file: ./secrets/dd_api_key
+
+configs:
+  nginx_config:
+    file: ./Projects/API/nginx/nginx.conf 
+
+networks:
+  nginxDD_network:
+    driver: overlay
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
